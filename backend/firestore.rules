@@ -1,0 +1,186 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- helpers ----------
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function roleOf(uid) {
+      return exists(/databases/$(database)/documents/users/$(uid))
+        ? get(/databases/$(database)/documents/users/$(uid)).data.role
+        : null;
+    }
+
+    function isAdmin() {
+      return signedIn() && roleOf(request.auth.uid) == 'admin';
+    }
+
+    function actor() {
+      return request.auth.token.email;
+    }
+
+    function isStr(v, min, max) {
+      return v is string && v.size() >= min && v.size() <= max;
+    }
+
+    function validSchedule(v) {
+      return v in ['MWF', 'EVERYDAY', 'MONTHLY'];
+    }
+
+    function validDateKey(v) {
+      return v is string && v.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+    }
+
+    // ---------- users ----------
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      // Self-registration always creates a viewer. Admins are promoted by an existing admin
+      // (or by the seed script, which bypasses rules).
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['role', 'email', 'createdAt'])
+        && request.resource.data.role == 'viewer';
+      allow update: if isAdmin()
+        && request.resource.data.keys().hasOnly(['role', 'email', 'createdAt'])
+        && request.resource.data.role in ['admin', 'viewer'];
+      allow delete: if isAdmin();
+    }
+
+    // ---------- settings ----------
+    match /settings/{docId} {
+      allow read: if signedIn();
+      allow write: if isAdmin()
+        && docId == 'app'
+        && request.resource.data.keys().hasOnly(['timezone', 'weekStartsOn', 'schoolLogoUrl', 'orgLogoUrl'])
+        && isStr(request.resource.data.timezone, 1, 64)
+        && request.resource.data.weekStartsOn in [0, 1]
+        && request.resource.data.schoolLogoUrl is string && request.resource.data.schoolLogoUrl.size() <= 2000
+        && request.resource.data.orgLogoUrl is string && request.resource.data.orgLogoUrl.size() <= 2000;
+    }
+
+    // ---------- areas ----------
+    match /areas/{areaId} {
+      allow read: if signedIn();
+      allow create, update: if isAdmin()
+        && request.resource.data.keys().hasOnly(['name', 'scheduleType', 'order', 'active'])
+        && isStr(request.resource.data.name, 1, 60)
+        && validSchedule(request.resource.data.scheduleType)
+        && request.resource.data.order is number
+        && request.resource.data.active is bool;
+      allow delete: if isAdmin();
+    }
+
+    // ---------- students ----------
+    match /students/{studentId} {
+      allow read: if signedIn();
+      allow create, update: if isAdmin()
+        && request.resource.data.keys().hasOnly(['fullName', 'nameLower', 'active', 'createdAt'])
+        && isStr(request.resource.data.fullName, 1, 60)
+        && isStr(request.resource.data.nameLower, 1, 60)
+        && request.resource.data.active is bool
+        && request.resource.data.createdAt is timestamp;
+      allow delete: if isAdmin();
+    }
+
+    // ---------- weekly assignments ----------
+    match /weeks/{weekId} {
+      allow read: if signedIn();
+      allow create, update: if isAdmin()
+        && validDateKey(weekId)
+        && request.resource.data.keys().hasOnly(['weekId', 'updatedAt'])
+        && request.resource.data.weekId == weekId
+        && request.resource.data.updatedAt is timestamp;
+      allow delete: if isAdmin();
+
+      match /assignments/{assignmentId} {
+        allow read: if signedIn();
+        allow create, update: if isAdmin()
+          && request.resource.data.keys().hasOnly([
+            'studentId', 'studentName', 'nameLower', 'areaId', 'areaName', 'areaLower',
+            'scheduleType', 'weekId', 'createdAt', 'createdBy'
+          ])
+          && isStr(request.resource.data.studentId, 1, 200)
+          && isStr(request.resource.data.studentName, 1, 60)
+          && isStr(request.resource.data.nameLower, 1, 60)
+          && isStr(request.resource.data.areaId, 1, 200)
+          && isStr(request.resource.data.areaName, 1, 60)
+          && isStr(request.resource.data.areaLower, 1, 60)
+          && validSchedule(request.resource.data.scheduleType)
+          && request.resource.data.weekId == weekId
+          && request.resource.data.createdAt is timestamp
+          && request.resource.data.createdBy == actor()
+          // identity of an existing assignment can never change (only its area)
+          && (resource == null || (
+            request.resource.data.studentId == resource.data.studentId
+            && request.resource.data.scheduleType == resource.data.scheduleType
+          ));
+        allow delete: if isAdmin();
+      }
+    }
+
+    // Collection-group reads power history search. Writes still go through the rules above.
+    match /{path=**}/assignments/{assignmentId} {
+      allow read: if signedIn();
+    }
+
+    // ---------- attendance ----------
+    match /attendance/{dateKey} {
+      allow read: if signedIn();
+      // Day document = the lock. Only admins can confirm (confirmed: true) or unlock (false).
+      allow create, update: if isAdmin()
+        && validDateKey(dateKey)
+        && request.resource.data.keys().hasOnly(['date', 'confirmed', 'confirmedAt', 'confirmedBy'])
+        && request.resource.data.date == dateKey
+        && request.resource.data.confirmed is bool
+        && request.resource.data.confirmedBy == actor();
+      allow delete: if false;
+
+      match /records/{studentId} {
+        function dayConfirmed() {
+          return exists(/databases/$(database)/documents/attendance/$(dateKey))
+            && get(/databases/$(database)/documents/attendance/$(dateKey)).data.confirmed == true;
+        }
+
+        function validRecord() {
+          let d = request.resource.data;
+          return d.keys().hasOnly([
+              'studentId', 'date', 'studentName', 'areaName', 'scheduleType', 'status',
+              'timeIn', 'note', 'markedBy', 'confirmed', 'updatedAt'
+            ])
+            && d.studentId == studentId
+            && d.date == dateKey
+            && isStr(d.studentName, 1, 60)
+            && isStr(d.areaName, 1, 60)
+            && validSchedule(d.scheduleType)
+            && d.status in ['P', 'L', 'A']
+            && (d.timeIn == null || (d.timeIn is string && d.timeIn.matches('^[0-9]{2}:[0-9]{2}$')))
+            && (d.note == null || (d.note is string && d.note.size() <= 200))
+            && d.markedBy == actor()
+            && d.confirmed is bool
+            // server timestamp => last-write-wins ordering that clients cannot forge
+            && d.updatedAt == request.time;
+        }
+
+        // An admin may flip a confirmed record back to unconfirmed (unlock), and nothing else.
+        function isUnlockOnly() {
+          return resource != null
+            && request.resource.data.confirmed == false
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['confirmed', 'updatedAt', 'markedBy']);
+        }
+
+        allow read: if signedIn();
+        allow create: if isAdmin() && validRecord() && !dayConfirmed();
+        allow update: if isAdmin() && validRecord()
+          && ((!dayConfirmed() && resource.data.confirmed != true) || isUnlockOnly());
+        allow delete: if isAdmin() && !dayConfirmed() && resource.data.confirmed != true;
+      }
+    }
+
+    match /{path=**}/records/{recordId} {
+      allow read: if signedIn();
+    }
+  }
+}

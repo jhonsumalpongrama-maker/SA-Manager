@@ -1,0 +1,45 @@
+{
+  "name": "sa-manager-frontend",
+  "private": true,
+  "version": "2.0.0",
+  "description": "Manage your student assistant schedules with a glassmorphic touch.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint src --ext .js,.jsx",
+    "format": "prettier --write \"src/**/*.{js,jsx,css}\"",
+    "test": "vitest run src",
+    "test:watch": "vitest src"
+  },
+  "dependencies": {
+    "date-fns": "^3.6.0",
+    "firebase": "^10.12.2",
+    "framer-motion": "^11.2.10",
+    "jspdf": "^2.5.1",
+    "jspdf-autotable": "^3.8.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.23.1",
+    "react-window": "^1.8.10",
+    "zustand": "^4.5.2"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.4.6",
+    "@testing-library/react": "^16.0.0",
+    "@testing-library/user-event": "^14.5.2",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.19",
+    "eslint": "^8.57.0",
+    "eslint-plugin-react": "^7.34.2",
+    "eslint-plugin-react-hooks": "^4.6.2",
+    "jsdom": "^24.1.0",
+    "postcss": "^8.4.38",
+    "prettier": "^3.3.2",
+    "tailwindcss": "^3.4.4",
+    "vite": "^5.3.1",
+    "vite-plugin-pwa": "^0.20.0",
+    "vitest": "^1.6.0"
+  }
+}

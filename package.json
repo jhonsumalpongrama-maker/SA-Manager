@@ -1,0 +1,15 @@
+{
+  "name": "sa-manager",
+  "private": true,
+  "version": "2.0.0",
+  "description": "Manage your student assistant schedules with a glassmorphic touch.",
+  "scripts": {
+    "install:all": "npm --prefix frontend install && npm --prefix backend install",
+    "dev": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "test": "npm --prefix frontend test",
+    "test:rules": "npm --prefix backend test",
+    "emulators": "npm --prefix backend run emulators",
+    "seed": "npm --prefix backend run seed --"
+  }
+}
