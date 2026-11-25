@@ -5,12 +5,12 @@
   "description": "Firebase backend for SA Manager: security rules, indexes, emulators, seed script and rules tests.",
   "type": "module",
   "scripts": {
-  "dev": "firebase emulators:start --only auth,firestore",
-  "emulators": "firebase emulators:start --only auth,firestore",
-  "seed": "node scripts/seed.js",
-  "test": "firebase emulators:exec --only firestore \"vitest run --config vitest.rules.config.js\"",
-  "deploy:rules": "firebase deploy --only firestore:rules,firestore:indexes"
-},
+    "dev": "firebase emulators:start --only auth,firestore",
+    "emulators": "firebase emulators:start --only auth,firestore",
+    "seed": "node scripts/seed.js",
+    "test": "firebase emulators:exec --only firestore \"vitest run --config vitest.rules.config.js\"",
+    "deploy:rules": "firebase deploy --only firestore:rules,firestore:indexes"
+  },
   "dependencies": {
     "firebase": "^10.12.2"
   },
